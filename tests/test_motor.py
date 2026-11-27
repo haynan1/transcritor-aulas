@@ -1,26 +1,11 @@
 import json
 import os
-from types import SimpleNamespace as NS
 
 import pytest
 
-import transcrever as t
-
-
-class ModeloFalso:
-    def __init__(self, segmentos, falhar_em=()):
-        self.segmentos, self.falhar_em = segmentos, falhar_em
-        self.chamadas = []
-
-    def transcribe(self, caminho, **opcoes):
-        self.chamadas.append((caminho, opcoes))
-        if any(n in caminho for n in self.falhar_em):
-            raise ValueError("midia invalida")
-        return iter(self.segmentos), NS(duration=10.0, language="pt")
-
-
-def fala(inicio, fim, texto, logprob=-0.1):
-    return NS(start=inicio, end=fim, text=texto, avg_logprob=logprob)
+from tests.falsos import ModeloFalso, fala
+from transcriptor import cli
+from transcriptor import motor as t
 
 
 def S(inicio, fim, texto, logprob=0.0):
@@ -34,7 +19,12 @@ def test_relogio(s, esperado):
 
 @pytest.mark.parametrize(
     "s,esperado",
-    [(0, "00:00:00,000"), (59.9996, "00:01:00,000"), (3599.9999, "01:00:00,000"), (1.5, "00:00:01,500")],
+    [
+        (0, "00:00:00,000"),
+        (59.9996, "00:01:00,000"),
+        (3599.9999, "01:00:00,000"),
+        (1.5, "00:00:01,500"),
+    ],
 )
 def test_relogio_srt_arredonda_sem_estourar(s, esperado):
     assert t.relogio_srt(s) == esperado
@@ -43,7 +33,7 @@ def test_relogio_srt_arredonda_sem_estourar(s, esperado):
 def test_pausa_longa_abre_paragrafo():
     ps = t.agrupar([S(0, 1, "a."), S(1.5, 2, "b."), S(4, 5, "c.")])
     assert [p.texto for p in ps] == ["a. b.", "c."]
-    assert ps[1].inicio == 4
+    assert (ps[1].inicio, ps[1].fim) == (4, 5)
 
 
 def test_paragrafo_longo_so_quebra_em_fim_de_frase():
@@ -99,15 +89,19 @@ def test_saidas_de_extensoes_diferentes_nao_colidem(tmp_path):
     assert t.pasta_de_saida(tmp_path / "a.mp3") != t.pasta_de_saida(tmp_path / "a.mp4")
 
 
-def test_transcrever_grava_tudo(tmp_path):
+def test_transcrever_grava_tudo_e_relata_progresso(tmp_path):
     audio = tmp_path / "Aula ção.mp3"
     audio.touch()
     modelo = ModeloFalso([fala(0, 2, " Olá, coração.")])
-    saida = t.transcrever(modelo, audio, "pt", "ROAS")
-    assert {p.name for p in saida.iterdir()} == {"transcricao.md", "legendas.srt", "segmentos.json"}
+    relatos = []
+    saida = t.transcrever(modelo, audio, "pt", "ROAS", lambda s, d: relatos.append((s, d)))
+    assert {p.name for p in saida.iterdir()} == set(t.ARQUIVOS_SAIDA)
     assert "Olá, coração." in (saida / "transcricao.md").read_text("utf-8")
-    assert json.loads((saida / "segmentos.json").read_text("utf-8"))["segmentos"][0]["texto"] == "Olá, coração."
+    dados = json.loads((saida / "segmentos.json").read_text("utf-8"))
+    assert dados["segmentos"][0]["texto"] == "Olá, coração."
     assert modelo.chamadas[0][1]["hotwords"] == "Termos: ROAS."
+    assert relatos[0] == (None, 10.0)
+    assert relatos[1][0].texto == "Olá, coração."
     assert t.pronta(audio)
 
 
@@ -120,28 +114,43 @@ def test_audio_regravado_volta_para_a_fila(tmp_path):
     assert not t.pronta(audio)
 
 
-def test_falha_nao_derruba_a_fila(tmp_path, monkeypatch, capsys):
+def test_modelo_ausente_explica(tmp_path):
+    with pytest.raises(t.ErroTranscricao, match=r"instalar\.bat"):
+        t.carregar_modelo(tmp_path / "nada", 4)
+
+
+# ---- linha de comando ----------------------------------------------------------------
+
+
+@pytest.fixture
+def modelo_falso(monkeypatch):
+    def usar(modelo):
+        monkeypatch.setattr(t, "carregar_modelo", lambda caminho, threads: modelo)
+        return modelo
+
+    return usar
+
+
+def test_cli_falha_nao_derruba_a_fila(tmp_path, modelo_falso, capsys):
     for nome in ("a.mp3", "ruim.mp3", "z.mp3"):
         (tmp_path / nome).touch()
-    modelo = ModeloFalso([fala(0, 1, "x")], falhar_em=("ruim",))
-    monkeypatch.setattr(t, "carregar_modelo", lambda threads: modelo)
-    assert t.main([str(tmp_path)]) == 1
+    modelo_falso(ModeloFalso([fala(0, 1, "x")], falhar_em=("ruim",)))
+    assert cli.main([str(tmp_path)]) == 1
     assert "ruim.mp3" in capsys.readouterr().err
     assert t.pronta(tmp_path / "a.mp3") and t.pronta(tmp_path / "z.mp3")
     assert not t.pasta_de_saida(tmp_path / "ruim.mp3").exists()
 
 
-def test_segunda_rodada_pula_e_refazer_repete(tmp_path, monkeypatch):
+def test_cli_segunda_rodada_pula_e_refazer_repete(tmp_path, modelo_falso):
     (tmp_path / "a.mp3").touch()
-    modelo = ModeloFalso([fala(0, 1, "x")])
-    monkeypatch.setattr(t, "carregar_modelo", lambda threads: modelo)
+    modelo = modelo_falso(ModeloFalso([fala(0, 1, "x")]))
     for extra, total in ([], 1), ([], 1), (["--refazer"], 2):
-        assert t.main([str(tmp_path), *extra]) == 0
+        assert cli.main([str(tmp_path), *extra]) == 0
         assert len(modelo.chamadas) == total
 
 
-def test_modelo_ausente_explica(tmp_path, monkeypatch, capsys):
+def test_cli_modelo_ausente_explica(tmp_path, monkeypatch, capsys):
     (tmp_path / "a.mp3").touch()
-    monkeypatch.setattr(t, "MODELO", tmp_path / "nada")
-    assert t.main([str(tmp_path)]) == 1
+    monkeypatch.setenv("TRANSCRIPTOR_MODELO", str(tmp_path / "nada"))
+    assert cli.main([str(tmp_path)]) == 1
     assert "instalar.bat" in capsys.readouterr().err

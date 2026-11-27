@@ -1,16 +1,24 @@
-# Transcritor de aulas
+# Transcriptor Class
 
-Grava a aula no Audacity, exporta para a pasta `Gravações` e arrasta o arquivo para `transcrever.bat`. O resultado é o texto completo da aula, com o tempo de cada trecho.
+Painel local para transcrever aulas gravadas. Importe a gravação, acompanhe a transcrição com tempo restante e uso do processador, e leia o texto com o áudio sincronizado.
 
-Tudo roda no seu computador, com o Whisper `large-v3-turbo` (via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)). Nenhum áudio vai para a internet.
+Tudo roda no seu computador, com o Whisper `large-v3-turbo` via [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Nenhum áudio vai para a internet.
+
+| Tela | O que faz |
+|---|---|
+| **Painel** | Aula transcrevendo agora: porcentagem, tempo restante, velocidade e o texto chegando. Fila com previsão de término. CPU em tempo real (máquina e transcrição), núcleos e memória |
+| **Biblioteca** | Todas as aulas da pasta `Gravações`, com formato, duração e estado. Transcrever, refazer, ler e baixar `.md` e `.srt` |
+| **Importar** | Arrastar gravações, com progresso do envio e conferência do formato |
+| **Leitor** | Texto em parágrafos com o tempo. Clique no tempo para ouvir o trecho. Busca, cópia e o texto ao vivo enquanto transcreve |
+| **Manual** | Do Audacity 4 ao estudo, com a janela de exportação preenchida |
+
+Tem tema escuro e claro e funciona no celular.
 
 ## Instalar numa máquina nova
 
-Precisa de Windows, Git e Python 3.13.
-
 ```powershell
 winget install --id Git.Git -e
-winget install --id Python.Python.3.13 -e
+winget install --id astral-sh.uv -e
 winget install --id Audacity.Audacity -e
 ```
 
@@ -18,88 +26,55 @@ winget install --id Audacity.Audacity -e
 git clone https://github.com/haynan1/transcritor-aulas.git "$HOME\Desktop\Aulas transcrição"
 ```
 
-Depois, dê dois cliques em `instalar.bat`. Ele cria o ambiente em `%USERPROFILE%\TranscritorAulas` e baixa o modelo (cerca de 1,6 GB, uma vez só).
+Feche e abra o PowerShell (para o `uv` entrar no PATH) e dê dois cliques em **`instalar.bat`**. Ele instala o Python certo, as dependências exatas do `uv.lock` e o modelo (cerca de 1,6 GB, uma vez só).
 
-## Gravar no Audacity 4
+## Usar
 
-Use o **Audacity 4.0** ou mais novo. É nele que estas instruções e as telas de exportação foram conferidas.
+Dê dois cliques em **`iniciar.bat`**. O painel abre em http://127.0.0.1:7351. Enquanto essa janela estiver aberta, as transcrições continuam, mesmo que você feche a aba do navegador. Ao fechar a janela, a fila é salva e retomada na próxima vez.
 
-**Uma vez só**, em Audio Setup:
+Para transcrever sem o painel, arraste o arquivo para cima de `transcrever.bat`.
 
-| Ajuste | Valor |
-|---|---|
-| Host | Windows WASAPI |
-| Dispositivo de gravação | a saída em que você ouve a aula, com `(loopback)` no nome |
-| Monitoramento de entrada | desligado |
-| Taxa do projeto | 48000 Hz (a mesma do Windows, para não haver conversão durante a gravação) |
+## Exportar do Audacity 4
 
-**Em toda aula:** feche o que faz som, dê play na aula em 1x e clique em gravar. Ao terminar, pare.
-
-## Exportar para transcrição
-
-**Arquivo › Exportar áudio** (`Ctrl` + `Shift` + `E`). Não use **Salvar**: ele cria um projeto `.aup4`, que não dá para transcrever.
+**Arquivo › Exportar áudio** (`Ctrl` + `Shift` + `E`):
 
 | Campo | Valor | Por quê |
 |---|---|---|
-| Tipo | Todo o áudio do projeto | |
-| Nome do arquivo | `ModuloNN_aulaNN`, ex.: `Modulo02_aula03` | Mantém as aulas em ordem na pasta |
-| Pasta | `...\Aulas transcrição\Gravações` | É onde o transcritor procura |
-| Formato | **FLAC Files** | Sem perda e com metade do tamanho do WAV |
+| Nome do arquivo | `ModuloNN_aulaNN` | Mantém as aulas em ordem |
+| Pasta | `...\Aulas transcrição\Gravações` | A Biblioteca mostra o que estiver aqui |
+| Formato | **FLAC Files** | Sem perda, com metade do tamanho do WAV |
 | Canais | **Mono** | Voz não precisa de estéreo |
 | Taxa de amostragem | **16000 Hz** | É a taxa que o Whisper usa internamente |
 | Profundidade dos bits | **16 bit** | Suficiente para voz |
 | Nível | **5** | Compressão do FLAC; qualquer nível é sem perda |
-| Aparar o espaço em branco antes do primeiro clipe | **desmarcado** | Mantém os tempos iguais aos da gravação |
+| Aparar o espaço em branco | **desmarcado** | Mantém os tempos iguais aos da gravação |
 
-Uma aula de 1h45 fica com cerca de 80 MB.
+O passo a passo completo, com a gravação pelo loopback do Windows, está na tela **Manual** do painel.
 
-O Whisper converte qualquer entrada para 16 kHz mono antes de transcrever. Por isso, exportar já nesse formato não muda o resultado e deixa o arquivo muito menor. Se quiser guardar uma cópia para reeditar ou publicar, exporte outra em FLAC a 48000 Hz.
+## Ajustes
 
-## Transcrever
+Variáveis de ambiente opcionais:
 
-Arraste o arquivo da aula para cima de `transcrever.bat`. Ao lado do áudio aparece a pasta `<arquivo> - transcricao` com:
-
-| Arquivo | Para que serve |
+| Variável | Padrão |
 |---|---|
-| `transcricao.md` | Texto em parágrafos, com o tempo. Use este para estudar e gerar materiais |
-| `legendas.srt` | Legendas sincronizadas |
-| `segmentos.json` | Tempo e confiança de cada trecho |
+| `TRANSCRIPTOR_PORTA` | `7351` |
+| `TRANSCRIPTOR_THREADS` | número de núcleos físicos |
+| `TRANSCRIPTOR_GRAVACOES` | `Gravações` dentro do projeto |
+| `TRANSCRIPTOR_MODELO` | `%USERPROFILE%\TranscritorAulas\modelo-large-v3-turbo` |
 
-Trechos com **[conferir]** tiveram baixa confiança. Confira números, nomes e citações no áudio.
-
-Se você arrastar a pasta `Gravações` inteira, o que já foi transcrito é pulado. Para refazer uma aula, apague a pasta `- transcricao` dela ou rode com `--refazer`.
-
-Pelo terminal, também dá para passar jargões do curso, o que melhora a grafia deles:
+## Desenvolvimento
 
 ```powershell
-& "$env:USERPROFILE\TranscritorAulas\venv\Scripts\python.exe" -I transcrever.py "Gravações\Modulo02_aula03.flac" --termos "ROAS, CPA, Shopify"
+uv sync
+uv run pytest
+uv run ruff check
+uv run mypy
 ```
 
-## Estrutura
+Decisões de arquitetura e segurança: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-```
-transcrever.py      transcrição e geração dos arquivos
-transcrever.bat     atalho para arrastar arquivos
-instalar.bat        cria o ambiente e baixa o modelo
-requirements.txt    dependências com versão fixa
-tests/              testes (não precisam do modelo)
-COMO USAR.html      guia passo a passo para o dia a dia
-LICENSE             licença MIT
-Gravações/          áudios e transcrições (fora do Git)
-```
-
-Os áudios e as transcrições não vão para o GitHub. São grandes, e o conteúdo do curso não é nosso para publicar. Cada máquina tem a sua pasta `Gravações`.
-
-## Testes
-
-```powershell
-& "$env:USERPROFILE\TranscritorAulas\venv\Scripts\python.exe" -m pytest
-```
-
-## Uso
+## Uso e licença
 
 Confira se o curso permite gravar. As transcrições são para estudo pessoal: republicar ou vender o conteúdo exige autorização do autor.
 
-## Licença
-
-O código está sob a licença [MIT](LICENSE). A licença cobre só o código deste repositório, e não as aulas que você gravar nem as transcrições delas.
+O código está sob a licença [MIT](LICENSE). Ela cobre só o código deste repositório, e não as aulas gravadas nem as transcrições. As fontes em `web/fonts` estão sob a SIL Open Font License ([OFL.txt](web/fonts/OFL.txt)).

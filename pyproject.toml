@@ -1,12 +1,64 @@
 [project]
-name = "transcritor-aulas"
-version = "1.0.0"
-description = "Transcrição local de aulas gravadas, com Whisper (faster-whisper)."
-requires-python = ">=3.13"
+name = "transcriptor-class"
+version = "2.0.0"
+description = "Transcriptor Class: transcrição local de aulas com Whisper, com painel web para importar, acompanhar e ler."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 license-files = ["LICENSE"]
+dependencies = [
+    # O faster-whisper 1.2.1 chama av.open(metadata_errors=...), que o PyAV 18 removeu.
+    "av>=17.1,<18",
+    "fastapi>=0.120",
+    "faster-whisper==1.2.1",
+    "psutil>=7",
+    "uvicorn>=0.38",
+]
+
+[project.scripts]
+transcriptor = "transcriptor.__main__:main"
+transcrever = "transcriptor.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.18",
+    "pytest>=9",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["transcriptor"]
+
+[tool.uv]
+# O ambiente fica dentro do projeto: cada clone tem o seu, sem depender de pastas fora dele.
+python-preference = "managed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
-addopts = "-q"
+addopts = "-q --strict-markers"
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "S", "RUF", "PTH", "ASYNC"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # o texto é em português: acentos e travessões são intencionais
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S108"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+files = ["transcriptor"]
+
+[[tool.mypy.overrides]]
+module = ["faster_whisper", "av", "psutil"]
+ignore_missing_imports = true

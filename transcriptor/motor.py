@@ -1,32 +1,31 @@
-"""Transcreve aulas gravadas, localmente, com Whisper (faster-whisper).
+"""Transcrição de um arquivo e montagem dos resultados.
 
-Para cada áudio ou vídeo, gera ao lado do arquivo uma pasta `<nome> - transcricao` com:
+Para cada áudio ou vídeo, grava ao lado do arquivo uma pasta `<nome> - transcricao` com:
   transcricao.md   texto em parágrafos, com marcação de tempo
   legendas.srt     legendas
-  segmentos.json   segmentos com tempos e confiança
+  segmentos.json   segmentos com tempos e confiança (gravado por último: marca de conclusão)
 
 Nada é enviado para a internet: o modelo é lido do disco.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
-import os
-import sys
-import time
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Protocol, TypedDict, cast
 
-BASE = Path.home() / "TranscritorAulas"
-MODELO = BASE / "modelo-large-v3-turbo"
+import av
+
 EXTENSOES = frozenset(
-    ".mp3 .flac .wav .m4a .aac .ogg .opus .wma .mp4 .mkv .webm .mov .avi".split()
+    {".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".wma"}  # áudio
+    | {".mp4", ".mkv", ".webm", ".mov", ".avi"}  # vídeo
 )
-
 PROJETOS_AUDACITY = frozenset({".aup", ".aup3", ".aup4"})
+SUFIXO_SAIDA = " - transcricao"
+ARQUIVOS_SAIDA = ("transcricao.md", "legendas.srt", "segmentos.json")
 
 # Um parágrafo fecha numa pausa longa ou, passado o alvo, no fim de uma frase.
 PAUSA_PARAGRAFO_S = 2.0
@@ -56,8 +55,51 @@ class Segmento:
 @dataclass(frozen=True)
 class Paragrafo:
     inicio: float
+    fim: float
     texto: str
     inseguro: bool
+
+
+class SegmentoWhisper(Protocol):
+    start: float
+    end: float
+    text: str
+    avg_logprob: float
+
+
+class InfoWhisper(Protocol):
+    duration: float
+    language: str
+
+
+class ModeloWhisper(Protocol):
+    """O que usamos do faster_whisper.WhisperModel (que não publica tipos)."""
+
+    def transcribe(
+        self, audio: str, **opcoes: object
+    ) -> tuple[Iterable[SegmentoWhisper], InfoWhisper]: ...
+
+
+class SegmentoJson(TypedDict):
+    inicio: float
+    fim: float
+    texto: str
+    logprob: float
+
+
+class ArquivoSegmentos(TypedDict):
+    arquivo: str
+    idioma: str
+    duracao: float
+    segmentos: list[SegmentoJson]
+
+
+# Erros que a leitura do áudio (PyAV) e o modelo (CTranslate2) lançam para mídia ruim.
+ERROS_DE_MIDIA = (av.error.FFmpegError, RuntimeError, ValueError, OSError)
+
+
+# Chamado com None ao começar (depois de ler a duração) e com cada segmento novo.
+Progresso = Callable[[Segmento | None, float], None]
 
 
 def relogio(segundos: float) -> str:
@@ -82,6 +124,7 @@ def agrupar(segmentos: Iterable[Segmento]) -> list[Paragrafo]:
             paragrafos.append(
                 Paragrafo(
                     bloco[0].inicio,
+                    bloco[-1].fim,
                     " ".join(s.texto for s in bloco),
                     any(s.inseguro for s in bloco),
                 )
@@ -134,12 +177,16 @@ def gravar(destino: Path, conteudo: str) -> None:
     """Troca o arquivo de uma vez, para nunca deixar um resultado pela metade."""
     temporario = destino.with_name(destino.name + ".tmp")
     temporario.write_text(conteudo, encoding="utf-8")
-    os.replace(temporario, destino)
+    temporario.replace(destino)
 
 
 def pasta_de_saida(audio: Path) -> Path:
     # A extensão entra no nome para aula.mp3 e aula.mp4 não se sobrescreverem.
-    return audio.with_name(f"{audio.name} - transcricao")
+    return audio.with_name(f"{audio.name}{SUFIXO_SAIDA}")
+
+
+def eh_midia(caminho: Path) -> bool:
+    return caminho.suffix.lower() in EXTENSOES
 
 
 def coletar(entradas: Iterable[Path]) -> list[Path]:
@@ -149,16 +196,16 @@ def coletar(entradas: Iterable[Path]) -> list[Path]:
         entrada = entrada.resolve()
         if entrada.is_dir():
             for arquivo in sorted(entrada.iterdir()):
-                if arquivo.is_file() and arquivo.suffix.lower() in EXTENSOES:
+                if arquivo.is_file() and eh_midia(arquivo):
                     encontrados[arquivo] = None
         elif not entrada.is_file():
             raise ErroTranscricao(f"Arquivo não encontrado: {entrada}")
         elif entrada.suffix.lower() in PROJETOS_AUDACITY:
             raise ErroTranscricao(
                 f"{entrada.name} é um projeto do Audacity. "
-                "Abra no Audacity e use Arquivo > Exportar áudio para gerar um MP3."
+                "Abra no Audacity e use Arquivo > Exportar áudio para gerar um FLAC."
             )
-        elif entrada.suffix.lower() not in EXTENSOES:
+        elif not eh_midia(entrada):
             raise ErroTranscricao(f"Formato não suportado: {entrada.name}")
         else:
             encontrados[entrada] = None
@@ -173,8 +220,18 @@ def pronta(audio: Path) -> bool:
     return marca.is_file() and marca.stat().st_mtime >= audio.stat().st_mtime
 
 
-def transcrever(modelo, audio: Path, idioma: str | None, termos: str | None) -> Path:
-    inicio = time.monotonic()
+def ler_segmentos(audio: Path) -> ArquivoSegmentos:
+    texto = (pasta_de_saida(audio) / "segmentos.json").read_text(encoding="utf-8")
+    return cast(ArquivoSegmentos, json.loads(texto))
+
+
+def transcrever(
+    modelo: ModeloWhisper,
+    audio: Path,
+    idioma: str | None,
+    termos: str | None,
+    progresso: Progresso | None = None,
+) -> Path:
     try:
         gerador, info = modelo.transcribe(
             str(audio),
@@ -187,84 +244,39 @@ def transcrever(modelo, audio: Path, idioma: str | None, termos: str | None) -> 
             # A frase precisa de ponto: lista solta faz o modelo parar de pontuar.
             hotwords=f"Termos: {termos.strip(' .')}." if termos else None,
         )
+        if progresso:
+            progresso(None, info.duration)
         segmentos: list[Segmento] = []
         for s in gerador:
-            segmentos.append(
-                Segmento(round(s.start, 2), round(s.end, 2), s.text.strip(), round(s.avg_logprob, 3))
+            seg = Segmento(
+                round(s.start, 2), round(s.end, 2), s.text.strip(), round(s.avg_logprob, 3)
             )
-            feito = min(100, s.end / info.duration * 100) if info.duration else 100
-            print(f"\r  {feito:3.0f}%  {relogio(s.end)} de {relogio(info.duration)}", end="", flush=True)
-    except Exception as erro:
-        # PyAV e CTranslate2 lançam tipos variados para mídia ilegível.
+            segmentos.append(seg)
+            if progresso:
+                progresso(seg, info.duration)
+    except ERROS_DE_MIDIA as erro:
         raise ErroTranscricao(f"não consegui transcrever ({type(erro).__name__}: {erro})") from erro
-    print()
 
     saida = pasta_de_saida(audio)
     saida.mkdir(exist_ok=True)
     gravar(saida / "transcricao.md", montar_md(audio.stem, info.duration, segmentos))
     gravar(saida / "legendas.srt", montar_srt(segmentos))
-    dados = {
+    dados: ArquivoSegmentos = {
         "arquivo": audio.name,
         "idioma": info.language,
         "duracao": round(info.duration, 2),
-        "segmentos": [asdict(s) for s in segmentos],
+        "segmentos": [cast(SegmentoJson, asdict(s)) for s in segmentos],
     }
     gravar(saida / "segmentos.json", json.dumps(dados, ensure_ascii=False, indent=1))
-
-    gasto = time.monotonic() - inicio
-    print(f"  Pronto em {relogio(gasto)} ({info.duration / gasto:.1f}x o tempo real)")
     return saida
 
 
-def carregar_modelo(threads: int):
-    if not (MODELO / "model.bin").is_file():
-        raise ErroTranscricao(f"Modelo não encontrado em {MODELO}. Rode instalar.bat.")
+def carregar_modelo(caminho: Path, threads: int) -> ModeloWhisper:
+    if not (caminho / "model.bin").is_file():
+        raise ErroTranscricao(f"Modelo não encontrado em {caminho}. Rode instalar.bat.")
     from faster_whisper import WhisperModel
 
-    return WhisperModel(
-        str(MODELO), device="cpu", compute_type="int8", cpu_threads=threads, local_files_only=True
+    modelo: ModeloWhisper = WhisperModel(
+        str(caminho), device="cpu", compute_type="int8", cpu_threads=threads, local_files_only=True
     )
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    for fluxo in (sys.stdout, sys.stderr):
-        if hasattr(fluxo, "reconfigure"):
-            fluxo.reconfigure(encoding="utf-8", errors="replace")
-
-    cli = argparse.ArgumentParser(description="Transcreve aulas localmente.")
-    cli.add_argument("entradas", nargs="+", type=Path, help="arquivos ou pastas")
-    cli.add_argument("--idioma", default="pt", help="pt, en, es... ou auto (padrão: pt)")
-    cli.add_argument("--termos", help="nomes e jargões do curso, separados por vírgula")
-    cli.add_argument("--refazer", action="store_true", help="transcreve mesmo se já estiver pronto")
-    cli.add_argument("--threads", type=int, default=16, help="núcleos usados (padrão: 16)")
-    args = cli.parse_args(argv)
-
-    try:
-        arquivos = coletar(args.entradas)
-        pendentes = [a for a in arquivos if args.refazer or not pronta(a)]
-        for feito in (a for a in arquivos if a not in pendentes):
-            print(f"Já transcrito, pulando: {feito.name}")
-        if not pendentes:
-            return 0
-        print("Carregando o modelo...")
-        modelo = carregar_modelo(args.threads)
-    except ErroTranscricao as erro:
-        print(f"Erro: {erro}", file=sys.stderr)
-        return 1
-
-    idioma = None if args.idioma == "auto" else args.idioma
-    falhas = 0
-    for n, audio in enumerate(pendentes, 1):
-        print(f"[{n}/{len(pendentes)}] {audio.name}")
-        try:
-            saida = transcrever(modelo, audio, idioma, args.termos)
-            print(f"  {saida}")
-        except (ErroTranscricao, OSError) as erro:
-            # Um arquivo ruim não derruba o resto da fila.
-            falhas += 1
-            print(f"\n  Erro em {audio.name}: {erro}", file=sys.stderr)
-    return 1 if falhas else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return modelo
