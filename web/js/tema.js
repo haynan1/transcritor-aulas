@@ -32,6 +32,13 @@
     },
   };
 
+  // A barra lateral recolhida também precisa valer antes de pintar, para não pular.
+  try {
+    if (localStorage.getItem("tc-lateral") === "recolhida") document.documentElement.dataset.lateral = "recolhida";
+  } catch (erro) {
+    /* sem armazenamento: começa aberta */
+  }
+
   sistema.addEventListener("change", function () {
     if (document.documentElement.dataset.preferenciaTema === "sistema") {
       aplicar("sistema");

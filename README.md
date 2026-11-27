@@ -51,6 +51,23 @@ Para transcrever sem o painel, arraste o arquivo para cima de `transcrever.bat`.
 
 O passo a passo completo, com a gravação pelo loopback do Windows, está na tela **Manual** do painel.
 
+## Formatos aceitos
+
+Todos dão o mesmo texto: o Whisper converte tudo para 16 kHz mono antes de começar. O que muda é o tamanho do arquivo.
+
+| Formato | Extensão | Observação |
+|---|---|---|
+| **FLAC** ✅ recomendado | `.flac` | Sem perda e com metade do tamanho do WAV. Exporte em mono, 16 kHz, 16 bit |
+| WAV | `.wav` | Sem perda, mas grande: 2 h a 48 kHz passam de 600 MB |
+| MP3 | `.mp3` | Com perda; transcreve bem a partir de 64 kbps |
+| M4A / AAC | `.m4a`, `.aac` | Com perda; comum em gravações de celular |
+| Opus | `.opus` | Com perda; o menor arquivo para voz |
+| Ogg Vorbis | `.ogg` | Com perda |
+| WMA | `.wma` | Com perda; funciona, mas prefira FLAC ou MP3 |
+| Vídeo | `.mp4`, `.mkv`, `.webm`, `.mov`, `.avi` | Usa só o som; o arquivo é muito maior |
+
+Não são aceitos: projetos do Audacity (`.aup`, `.aup3`, `.aup4`, que precisam ser exportados antes) e, do menu do Audacity 4, *Other uncompressed* (AIFF), WavPack, AC3 e AMR (grava a 8 kHz e perde palavras).
+
 ## Ajustes
 
 Variáveis de ambiente opcionais:

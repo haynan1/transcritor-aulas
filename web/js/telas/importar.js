@@ -4,7 +4,9 @@
 import { api } from "../api.js";
 import { bytes, duracao, h, icone, seloFormato, toast, trocar } from "../ui.js";
 
-const EXTENSOES = [".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".wma", ".mp4", ".mkv", ".webm", ".mov", ".avi"];
+// Reserva até a config chegar do servidor, que é a fonte da lista (motor.EXTENSOES).
+const EXTENSOES_PADRAO = [".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".wma", ".mp4", ".mkv", ".webm", ".mov", ".avi"];
+const VIDEO = [".mp4", ".mkv", ".webm", ".mov", ".avi"];
 const PROJETOS = [".aup", ".aup3", ".aup4"];
 const CHAVE_PREFERENCIAS = "tc-importar";
 
@@ -52,16 +54,18 @@ let appAtual = null;
 export function montar(raiz, app) {
   const prefs = lerPreferencias();
   appAtual = app;
+  /** @returns {string[]} */
+  const extensoes = () => app.config?.extensoes || EXTENSOES_PADRAO;
 
   const seletor = /** @type {HTMLInputElement} */ (
-    h("input", { type: "file", multiple: true, accept: [...EXTENSOES, "audio/*", "video/*"].join(","), class: "visualmente-oculto", tabindex: "-1", "aria-hidden": "true" })
+    h("input", { type: "file", multiple: true, accept: [...extensoes(), "audio/*", "video/*"].join(","), class: "visualmente-oculto", tabindex: "-1", "aria-hidden": "true" })
   );
   const zona = h(
     "button",
     { type: "button", class: "soltar", "aria-describedby": "ajuda-soltar" },
     h("span", { class: "soltar-icone" }, icone("importar", 22)),
     h("strong", null, "Arraste as gravações para cá"),
-    h("span", { id: "ajuda-soltar" }, "ou clique para escolher. FLAC, MP3, WAV, M4A e vídeos. Até 4 GB por arquivo."),
+    h("span", { id: "ajuda-soltar" }, "ou clique para escolher. Áudio ou vídeo, até 4 GB por arquivo. FLAC é o recomendado."),
   );
   zona.addEventListener("click", () => seletor.click());
   seletor.addEventListener("change", () => {
@@ -112,6 +116,25 @@ export function montar(raiz, app) {
     h("div", { class: "cartao-cabeca" }, h("h2", { id: "titulo-envios" }, icone("fila"), "Envios")),
     listaEnvios,
   );
+
+  const listaFormatos = h("div", { class: "formatos" });
+  let chaveFormatos = "";
+  const pintarFormatos = () => {
+    const chave = extensoes().join();
+    if (chave === chaveFormatos) return;
+    chaveFormatos = chave;
+    const lista = extensoes().filter((e) => e !== ".flac");
+    const audio = lista.filter((e) => !VIDEO.includes(e));
+    const video = lista.filter((e) => VIDEO.includes(e));
+    trocar(
+      listaFormatos,
+      h("span", { class: "rodape-tela" }, "Áudio"),
+      h("div", { class: "selos" }, ...audio.map((e) => h("span", { class: "selo num" }, e.slice(1).toUpperCase()))),
+      h("span", { class: "rodape-tela" }, "Vídeo (usa só o som)"),
+      h("div", { class: "selos" }, ...video.map((e) => h("span", { class: "selo num" }, e.slice(1).toUpperCase()))),
+    );
+  };
+  pintarFormatos();
 
   const ficha = (pares) =>
     h("dl", { class: "ficha" }, ...pares.map(([k, v]) => h("div", null, h("dt", null, k), h("dd", null, v))));
@@ -187,10 +210,17 @@ export function montar(raiz, app) {
               h(
                 "p",
                 { class: "rodape-tela" },
-                "O Whisper converte tudo para 16 kHz mono antes de transcrever. Exportar assim não muda o resultado e deixa o arquivo até 8 vezes menor. Outros formatos funcionam do mesmo jeito.",
+                "O Whisper converte tudo para 16 kHz mono antes de transcrever. Exportar assim não muda o resultado e deixa o arquivo até 8 vezes menor.",
               ),
+              h("span", { class: "rotulo rotulo-formatos" }, "Também aceita"),
+              listaFormatos,
             ),
-            h("div", { class: "resumo-fila" }, h("a", { href: "#/manual/exportar" }, "Como exportar no Audacity 4 →")),
+            h(
+              "div",
+              { class: "resumo-fila" },
+              h("a", { href: "#/manual/exportar" }, "Como exportar no Audacity 4 →"),
+              h("a", { href: "#/manual/formatos" }, "Todos os formatos"),
+            ),
           ),
         ),
       ),
@@ -206,7 +236,7 @@ export function montar(raiz, app) {
       if (PROJETOS.includes(ext)) {
         envio.estado = "erro";
         envio.erro = "É um projeto do Audacity. Abra no Audacity e use Arquivo › Exportar áudio para gerar um FLAC.";
-      } else if (!EXTENSOES.includes(ext)) {
+      } else if (!extensoes().includes(ext)) {
         envio.estado = "erro";
         envio.erro = `Formato ${ext || "sem extensão"} não é aceito.`;
       } else if (arquivo.size === 0) {
@@ -292,6 +322,10 @@ export function montar(raiz, app) {
   }
 
   pintarEnvioAtual = pintarEnvio;
+  const deixarDeOuvir = app.assinar(() => {
+    if (app.config) seletor.accept = [...extensoes(), "audio/*", "video/*"].join(",");
+    pintarFormatos();
+  });
   opcoesAtuais = () => ({ transcrever: transcreverAoImportar.checked, idioma: idioma.value, termos: termos.value.trim() });
   // Ao voltar para a tela, mostra os envios desta sessão.
   for (const envio of fila) {
@@ -306,6 +340,7 @@ export function montar(raiz, app) {
       window.removeEventListener("dragover", impedir);
       window.removeEventListener("drop", impedir);
       pintarEnvioAtual = () => {};
+      deixarDeOuvir();
     },
   };
 }

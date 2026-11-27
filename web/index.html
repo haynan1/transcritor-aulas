@@ -16,24 +16,27 @@
 <body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <div class="app">
-  <aside class="lateral" aria-label="Navegação">
+  <aside class="lateral" id="lateral" aria-label="Navegação">
     <a class="marca" href="#/" aria-label="Transcriptor Class, ir para o painel">
       <span class="marca-simbolo" aria-hidden="true"><span data-icone="marca"></span></span>
       <span class="marca-nome">Transcriptor<small>Class</small></span>
     </a>
     <nav class="nav" aria-label="Principal">
-      <a href="#/" data-rota="painel"><span data-icone="painel"></span>Painel<span class="nav-contador num" id="contador-fila" hidden></span></a>
-      <a href="#/biblioteca" data-rota="biblioteca"><span data-icone="biblioteca"></span>Biblioteca</a>
-      <a href="#/importar" data-rota="importar"><span data-icone="importar"></span>Importar</a>
-      <a href="#/manual" data-rota="manual"><span data-icone="manual"></span>Manual</a>
+      <a href="#/" data-rota="painel" title="Painel"><span data-icone="painel"></span><span class="nav-rotulo">Painel</span><span class="nav-contador num" id="contador-fila" hidden></span></a>
+      <a href="#/biblioteca" data-rota="biblioteca" title="Biblioteca"><span data-icone="biblioteca"></span><span class="nav-rotulo">Biblioteca</span></a>
+      <a href="#/importar" data-rota="importar" title="Importar"><span data-icone="importar"></span><span class="nav-rotulo">Importar</span></a>
+      <a href="#/manual" data-rota="manual" title="Manual"><span data-icone="manual"></span><span class="nav-rotulo">Manual</span></a>
     </nav>
     <div class="lateral-rodape">
-      <div class="conexao" id="conexao" role="status" data-estado="conectando">Conectando…</div>
+      <div class="conexao" id="conexao" role="status" data-estado="conectando"><span class="conexao-texto" id="conexao-texto">Conectando…</span></div>
       <div class="tema" role="group" aria-label="Tema">
         <button type="button" data-tema="escuro" aria-label="Tema escuro" title="Escuro"><span data-icone="lua"></span></button>
         <button type="button" data-tema="claro" aria-label="Tema claro" title="Claro"><span data-icone="sol"></span></button>
         <button type="button" data-tema="sistema" aria-label="Tema do sistema" title="Seguir o sistema"><span data-icone="sistema"></span></button>
       </div>
+      <button type="button" class="recolher" id="recolher" aria-controls="lateral" aria-expanded="true">
+        <span data-icone="recolher"></span><span class="recolher-texto">Recolher menu</span><kbd class="atalho">[</kbd>
+      </button>
     </div>
   </aside>
   <main class="principal" id="conteudo" tabindex="-1"></main>

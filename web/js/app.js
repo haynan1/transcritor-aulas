@@ -86,8 +86,10 @@ class App {
   definirConexao(estado) {
     this.conexao = estado;
     const el = /** @type {HTMLElement} */ (document.getElementById("conexao"));
+    const texto = { vivo: "Ao vivo", caiu: "Reconectando…", conectando: "Conectando…" }[estado] || estado;
     el.dataset.estado = estado;
-    el.textContent = { vivo: "Ao vivo", caiu: "Reconectando…", conectando: "Conectando…" }[estado] || estado;
+    el.title = texto;
+    /** @type {HTMLElement} */ (document.getElementById("conexao-texto")).textContent = texto;
   }
 
   conectar() {
@@ -154,13 +156,53 @@ function montarCasca() {
       const ordem = ["escuro", "claro", "sistema"];
       const escolhido = ordem.find((t) => t === /** @type {HTMLElement} */ (b).dataset.tema) || "sistema";
       // No celular só o botão ativo aparece: tocar nele avança para o próximo tema.
-      const estreito = window.matchMedia("(max-width: 900px)").matches;
+      const estreito =
+        window.matchMedia("(max-width: 900px)").matches || document.documentElement.dataset.lateral === "recolhida";
       const proximo = estreito ? ordem[(ordem.indexOf(window.temaTC.preferencia()) + 1) % 3] : escolhido;
       window.temaTC.definir(proximo);
       pintarTema();
     });
   }
   pintarTema();
+  montarRecolher();
+}
+
+/** Barra lateral recolhível: só ícones, com a escolha lembrada entre visitas. */
+function montarRecolher() {
+  const botao = /** @type {HTMLButtonElement} */ (document.getElementById("recolher"));
+  const raiz = document.documentElement;
+  const pintar = () => {
+    const recolhida = raiz.dataset.lateral === "recolhida";
+    botao.setAttribute("aria-expanded", String(!recolhida));
+    botao.setAttribute("aria-label", recolhida ? "Expandir menu" : "Recolher menu");
+    botao.title = `${recolhida ? "Expandir" : "Recolher"} menu ( [ )`;
+    const icone_ = icone(recolhida ? "expandir" : "recolher", 17);
+    botao.firstElementChild?.replaceWith(icone_);
+    /** @type {HTMLElement} */ (botao.querySelector(".recolher-texto")).textContent = recolhida ? "Expandir menu" : "Recolher menu";
+  };
+  const alternar = () => {
+    const recolhida = raiz.dataset.lateral !== "recolhida";
+    if (recolhida) raiz.dataset.lateral = "recolhida";
+    else delete raiz.dataset.lateral;
+    try {
+      if (recolhida) localStorage.setItem("tc-lateral", "recolhida");
+      else localStorage.removeItem("tc-lateral");
+    } catch {
+      /* sem armazenamento: vale só nesta aba */
+    }
+    pintar();
+    // O gráfico de CPU muda de largura: o ResizeObserver dele redesenha sozinho.
+  };
+  botao.addEventListener("click", alternar);
+  document.addEventListener("keydown", (e) => {
+    const alvo = /** @type {HTMLElement} */ (e.target);
+    if (e.key !== "[" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (alvo.closest("input, textarea, select, [contenteditable]")) return;
+    if (window.matchMedia("(max-width: 900px)").matches) return;
+    e.preventDefault();
+    alternar();
+  });
+  pintar();
 }
 
 async function iniciar() {

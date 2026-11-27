@@ -6,6 +6,36 @@ import { decimal, duracao, h, icone, toast } from "../ui.js";
 const PEDIDO_CLAUDE =
   "Esta é a transcrição de uma aula, com minhas anotações e prints. Corrija pelo contexto os erros de transcrição e me diga onde ficou em dúvida. Monte: 1) resumo; 2) conceitos e frameworks, com o tempo da aula; 3) estratégias aplicadas ao meu contexto; 4) checklist e plano de ação. Priorize o que marquei com !, explique o que marquei com ? e desenvolva o que marquei com *. Separe o que o professor disse do que é sugestão sua.";
 
+// Nome, extensões, observação e se é o recomendado. As extensões aceitas vêm do servidor
+// (motor.EXTENSOES); esta tabela só explica cada uma.
+/** @type {[string, string, string, boolean][]} */
+const FORMATOS = [
+  ["FLAC", ".flac", "Sem perda e com metade do tamanho do WAV. Exporte em mono, 16 kHz, 16 bit.", true],
+  ["WAV", ".wav", "Sem perda, mas grande: uma aula de 2 h a 48 kHz passa de 600 MB.", false],
+  ["MP3", ".mp3", "Com perda, mas transcreve bem a partir de 64 kbps.", false],
+  ["M4A / AAC", ".m4a, .aac", "Com perda; transcreve bem. Comum em gravações de celular.", false],
+  ["Opus", ".opus", "Com perda; o menor arquivo para voz. Bom para mandar pela internet.", false],
+  ["Ogg Vorbis", ".ogg", "Com perda; transcreve bem.", false],
+  ["WMA", ".wma", "Com perda; funciona, mas prefira FLAC ou MP3.", false],
+  ["Vídeo", ".mp4, .mkv, .webm, .mov, .avi", "Usa só o som do vídeo. O arquivo é muito maior: exporte só o áudio quando puder.", false],
+];
+
+// As opções que aparecem em Exportar áudio › Formato no Audacity 4.
+/** @type {[string, boolean, string][]} */
+const MENU_AUDACITY = [
+  ["WAV (Microsoft)", true, "Sem perda, arquivo grande"],
+  ["Other uncompressed files", false, "AIFF e outros: exporte em FLAC"],
+  ["MP3 Files", true, ""],
+  ["Ogg Vorbis Files", true, ""],
+  ["Opus Files", true, ""],
+  ["FLAC Files", true, "Recomendado"],
+  ["WavPack Files", false, "Exporte em FLAC, que também é sem perda"],
+  ["M4A (AAC) Files (FFmpeg)", true, ""],
+  ["AC3 Files (FFmpeg)", false, "Formato de cinema, sem vantagem para voz"],
+  ["AMR (narrow band) Files (FFmpeg)", false, "Grava a 8 kHz e perde palavras"],
+  ["WMA (version 2) Files (FFmpeg)", true, ""],
+];
+
 function codigo(texto, rotulo) {
   return h(
     "div",
@@ -88,6 +118,7 @@ export function montar(raiz, app, ancora) {
     ["audacity", "Preparar o Audacity 4"],
     ["gravar", "Gravar a aula"],
     ["exportar", "Exportar"],
+    ["formatos", "Formatos aceitos"],
     ["transcrever", "Importar e transcrever"],
     ["ler", "Ler e estudar"],
     ["problemas", "Se algo der errado"],
@@ -171,8 +202,29 @@ export function montar(raiz, app, ancora) {
             ),
           ),
           capitulo(
-            "transcrever",
+            "formatos",
             5,
+            "Formatos aceitos",
+            h("p", null, "O transcritor aceita áudio e vídeo. Todos dão o mesmo texto, porque o Whisper converte tudo para 16 kHz mono antes de começar. O que muda é o tamanho do arquivo e o tempo de envio."),
+            tabela(
+              ["Formato", "Extensão", "Observação"],
+              FORMATOS.map(([nome, extensoes, nota, recomendado]) => [
+                recomendado ? h("span", null, nome, " ", h("span", { class: "selo", dataset: { tom: "sinal" } }, icone("ok"), "Recomendado")) : nome,
+                extensoes,
+                nota,
+              ]),
+            ),
+            h("p", null, h("strong", null, "Recomendado: FLAC, mono, 16000 Hz, 16 bit. "), "É sem perda, como o WAV, e deixa uma aula de quase 2 horas com cerca de 80 MB."),
+            h("h3", { class: "subtitulo" }, "No menu Formato do Audacity 4"),
+            tabela(
+              ["Opção do menu", "Aceita?", "Observação"],
+              MENU_AUDACITY.map(([opcao, aceita, nota]) => [opcao, aceita ? "Sim" : "Não", nota]),
+            ),
+            h("p", null, "Projetos do Audacity (", h("code", null, ".aup"), ", ", h("code", null, ".aup3"), ", ", h("code", null, ".aup4"), ") não são áudio: abra no Audacity e use Exportar áudio."),
+          ),
+          capitulo(
+            "transcrever",
+            6,
             "Importar e transcrever",
             h(
               "ol",
@@ -185,7 +237,7 @@ export function montar(raiz, app, ancora) {
           ),
           capitulo(
             "ler",
-            6,
+            7,
             "Ler e estudar",
             h("p", null, "No leitor, clique no tempo de um parágrafo para ouvir aquele trecho. Espaço toca e pausa, as setas voltam e avançam 5 segundos e / abre a busca. Trechos marcados com ", h("strong", null, "conferir"), " tiveram baixa confiança: confira números, nomes e citações no áudio."),
             h("p", null, "Para gerar material de estudo, baixe o .md e envie ao Claude com suas notas e prints, junto com este pedido:"),
@@ -193,7 +245,7 @@ export function montar(raiz, app, ancora) {
           ),
           capitulo(
             "problemas",
-            7,
+            8,
             "Se algo der errado",
             tabela(
               ["O que aconteceu", "O que fazer"],

@@ -120,6 +120,32 @@ svg { display: block; flex: none; }
 .nav-contador { margin-left: auto; font: 500 11px/18px var(--f-mono); padding: 0 6px; border-radius: 9px; background: var(--sinal-fraco); color: var(--sinal); }
 
 .lateral-rodape { margin-top: auto; display: grid; gap: var(--e-4); }
+.recolher {
+  display: flex; align-items: center; gap: var(--e-3); min-height: 36px; padding: 0 var(--e-3); border: 0; border-radius: var(--r-1);
+  background: none; color: var(--texto-3); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background var(--rapido), color var(--rapido);
+}
+.recolher:hover { background: var(--superficie-2); color: var(--texto); }
+.atalho { margin-left: auto; font: 500 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--linha-forte); color: var(--texto-3); }
+
+/* Recolhida: só ícones. Os rótulos ficam ocultos só visualmente: o leitor de tela continua lendo. */
+@media (min-width: 901px) {
+  .app { transition: grid-template-columns var(--medio) var(--curva); }
+  :root[data-lateral="recolhida"] { --lateral: 68px; }
+  :root[data-lateral="recolhida"] .lateral { padding-inline: 12px; align-items: stretch; }
+  :root[data-lateral="recolhida"] .marca { justify-content: center; padding: 0; }
+  :root[data-lateral="recolhida"] .marca-nome,
+  :root[data-lateral="recolhida"] .nav-rotulo,
+  :root[data-lateral="recolhida"] .conexao-texto,
+  :root[data-lateral="recolhida"] .recolher-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :root[data-lateral="recolhida"] .nav a { justify-content: center; padding: 0; }
+  :root[data-lateral="recolhida"] .nav a[aria-current="page"]::before { left: -12px; }
+  :root[data-lateral="recolhida"] .nav-contador { position: absolute; top: 3px; right: 3px; min-width: 16px; padding: 0 4px; text-align: center; line-height: 16px; font-size: 10px; }
+  :root[data-lateral="recolhida"] .conexao { justify-content: center; padding: 0; }
+  :root[data-lateral="recolhida"] .tema { grid-template-columns: 1fr; }
+  :root[data-lateral="recolhida"] .tema button:not([aria-pressed="true"]) { display: none; }
+  :root[data-lateral="recolhida"] .recolher { justify-content: center; padding: 0; }
+  :root[data-lateral="recolhida"] .atalho { display: none; }
+}
 .conexao { display: flex; align-items: center; gap: var(--e-2); font: 500 12px/1 var(--f-mono); color: var(--texto-3); padding: 0 var(--e-2); }
 .conexao::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--texto-3); }
 .conexao[data-estado="vivo"]::before { background: var(--sinal); box-shadow: 0 0 0 3px var(--sinal-fraco); }
@@ -304,6 +330,9 @@ a.aula-titulo:hover { text-decoration: underline; text-underline-offset: 3px; te
 .envio-avisos li { display: flex; gap: var(--e-2); align-items: flex-start; }
 .envio-avisos svg { margin-top: 3px; }
 .ficha { display: grid; }
+.rotulo-formatos { display: block; margin: var(--e-5) 0 var(--e-3); }
+.formatos { display: grid; gap: var(--e-2); }
+.selos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--e-2); }
 .ficha div { display: flex; justify-content: space-between; gap: var(--e-3); padding: 10px 0; border-top: 1px solid var(--linha); font-size: 14px; }
 .ficha div:first-child { border-top: 0; padding-top: 0; }
 .ficha dt { color: var(--texto-2); }
@@ -356,6 +385,7 @@ mark[data-atual] { outline: 2px solid var(--atencao); }
 .capitulo h2 .num { font-size: 13px; color: var(--texto-3); font-weight: 500; }
 .capitulo > p, .capitulo li { color: var(--texto-2); max-width: 66ch; }
 .capitulo strong { color: var(--texto); font-weight: 550; }
+.subtitulo { font: 600 15px/1.3 var(--f-ui); letter-spacing: -0.01em; margin-top: var(--e-3); }
 .passos { display: grid; gap: var(--e-3); counter-reset: passo; }
 .passos > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--e-3); counter-increment: passo; }
 .passos > li::before { content: counter(passo); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 500 12px/1 var(--f-mono); background: var(--superficie-2); border: 1px solid var(--linha); color: var(--texto-2); }
@@ -410,7 +440,7 @@ mark[data-atual] { outline: 2px solid var(--atencao); }
     position: fixed; inset: auto 0 0 0; height: auto; z-index: var(--z-barra); flex-direction: row; padding: 6px var(--e-2) calc(6px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--linha); background: color-mix(in srgb, var(--fundo-alto) 92%, transparent); backdrop-filter: blur(14px);
   }
-  .marca, .lateral-rodape .conexao { display: none; }
+  .marca, .lateral-rodape .conexao, .recolher { display: none; }
   .nav { grid-auto-flow: column; grid-auto-columns: 1fr; flex: 1; }
   .nav a { flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; padding: 0 4px; font-size: 11px; }
   .nav a[aria-current="page"]::before { left: 30%; right: 30%; top: 0; bottom: auto; width: auto; height: 2px; }
