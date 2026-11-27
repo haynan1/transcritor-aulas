@@ -84,6 +84,7 @@ instalar.bat        cria o ambiente e baixa o modelo
 requirements.txt    dependências com versão fixa
 tests/              testes (não precisam do modelo)
 COMO USAR.html      guia passo a passo para o dia a dia
+LICENSE             licença MIT
 Gravações/          áudios e transcrições (fora do Git)
 ```
 
@@ -98,3 +99,7 @@ Os áudios e as transcrições não vão para o GitHub. São grandes, e o conte�
 ## Uso
 
 Confira se o curso permite gravar. As transcrições são para estudo pessoal: republicar ou vender o conteúdo exige autorização do autor.
+
+## Licença
+
+O código está sob a licença [MIT](LICENSE). A licença cobre só o código deste repositório, e não as aulas que você gravar nem as transcrições delas.
